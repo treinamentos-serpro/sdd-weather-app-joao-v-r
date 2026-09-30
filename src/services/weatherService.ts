@@ -20,10 +20,11 @@ interface GeocodingResult {
 }
 
 interface GeocodingResponse {
-  results?: GeocodingResult[];
+  results?: unknown;
 }
 
 interface ForecastResponse {
+  timezone?: unknown;
   current?: {
     temperature_2m?: unknown;
     relative_humidity_2m?: unknown;
@@ -59,17 +60,23 @@ function isGeocodingResult(value: unknown): value is GeocodingResult {
   const result = value as Record<string, unknown>;
 
   return (
-    typeof result.id === 'number' &&
+    isFiniteNumber(result.id) &&
     typeof result.name === 'string' &&
-    typeof result.latitude === 'number' &&
-    typeof result.longitude === 'number' &&
+    result.name.trim().length > 0 &&
+    isFiniteNumber(result.latitude) &&
+    isFiniteNumber(result.longitude) &&
     typeof result.country === 'string' &&
+    result.country.trim().length > 0 &&
     (result.admin1 === undefined || typeof result.admin1 === 'string')
   );
 }
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
+}
+
+function optionalNumber(value: unknown): number | undefined {
+  return isFiniteNumber(value) ? value : undefined;
 }
 
 function isForecastResponse(value: unknown): value is ForecastResponse {
@@ -81,6 +88,8 @@ function isForecastResponse(value: unknown): value is ForecastResponse {
   const dates = response.daily?.time;
 
   return (
+    typeof response.timezone === 'string' &&
+    response.timezone.length > 0 &&
     response.current !== undefined &&
     response.current !== null &&
     typeof response.current === 'object' &&
@@ -95,27 +104,35 @@ export async function fetchWithTimeout(
   init?: RequestInit,
 ): Promise<Response> {
   const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  const externalSignal = init?.signal;
+  let timedOut = false;
+  const abortRequest = () => controller.abort();
+  const timeoutId = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, REQUEST_TIMEOUT_MS);
+
+  if (externalSignal?.aborted) {
+    controller.abort();
+  } else {
+    externalSignal?.addEventListener('abort', abortRequest, { once: true });
+  }
 
   try {
     return await fetch(input, { ...init, signal: controller.signal });
-  } catch (error) {
-    if (
-      error !== null &&
-      typeof error === 'object' &&
-      'name' in error &&
-      error.name === 'AbortError'
-    ) {
+  } catch {
+    if (timedOut) {
       throw new WeatherServiceError('A requisição demorou demais.', 'timeout');
     }
 
     throw new WeatherServiceError('Falha de rede.', 'network');
   } finally {
     clearTimeout(timeoutId);
+    externalSignal?.removeEventListener('abort', abortRequest);
   }
 }
 
-export async function searchCities(name: string): Promise<City[]> {
+export async function searchCities(name: string, signal?: AbortSignal): Promise<City[]> {
   const trimmedName = name.trim();
 
   if (!trimmedName) {
@@ -124,21 +141,43 @@ export async function searchCities(name: string): Promise<City[]> {
 
   const url = `${GEOCODING_ENDPOINT}?name=${encodeURIComponent(trimmedName)}&count=5&language=pt&format=json`;
 
-  const response = await fetchWithTimeout(url);
+  const response = await fetchWithTimeout(url, { signal });
 
   if (!response.ok) {
     throw new WeatherServiceError(`A busca de cidades falhou (${response.status}).`, 'api');
   }
 
-  let payload: GeocodingResponse;
+  let payload: unknown;
 
   try {
-    payload = (await response.json()) as GeocodingResponse;
+    payload = await response.json();
   } catch {
     throw new WeatherServiceError('A resposta de cidades é inválida.', 'invalid-response');
   }
 
-  return (payload.results ?? []).filter(isGeocodingResult).map((result) => ({
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    throw new WeatherServiceError('A resposta de cidades é inválida.', 'invalid-response');
+  }
+
+  const results = (payload as GeocodingResponse).results;
+
+  if (results === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(results)) {
+    throw new WeatherServiceError('A resposta de cidades é inválida.', 'invalid-response');
+  }
+
+  if (results.length === 0) {
+    return [];
+  }
+
+  if (!results.every(isGeocodingResult)) {
+    throw new WeatherServiceError('A resposta de cidades é inválida.', 'invalid-response');
+  }
+
+  return results.map((result) => ({
     id: result.id,
     name: result.name,
     latitude: result.latitude,
@@ -148,7 +187,7 @@ export async function searchCities(name: string): Promise<City[]> {
   }));
 }
 
-export async function getWeather(city: City): Promise<WeatherData> {
+export async function getWeather(city: City, signal?: AbortSignal): Promise<WeatherData> {
   const parameters = new URLSearchParams({
     latitude: String(city.latitude),
     longitude: String(city.longitude),
@@ -160,7 +199,9 @@ export async function getWeather(city: City): Promise<WeatherData> {
     forecast_days: '5',
   });
 
-  const response = await fetchWithTimeout(`${FORECAST_ENDPOINT}?${parameters.toString()}`);
+  const response = await fetchWithTimeout(`${FORECAST_ENDPOINT}?${parameters.toString()}`, {
+    signal,
+  });
 
   if (!response.ok) {
     throw new WeatherServiceError(`A consulta meteorológica falhou (${response.status}).`, 'api');
@@ -198,37 +239,21 @@ export async function getWeather(city: City): Promise<WeatherData> {
     : [];
 
   const current: CurrentWeather = {
-    temperatureCelsius: isFiniteNumber(currentResponse?.temperature_2m)
-      ? currentResponse.temperature_2m
-      : undefined,
-    humidityPercent: isFiniteNumber(currentResponse?.relative_humidity_2m)
-      ? currentResponse.relative_humidity_2m
-      : undefined,
-    weatherCode: isFiniteNumber(currentResponse?.weather_code)
-      ? currentResponse.weather_code
-      : undefined,
-    windSpeedKmh: isFiniteNumber(currentResponse?.wind_speed_10m)
-      ? currentResponse.wind_speed_10m
-      : undefined,
+    temperatureCelsius: optionalNumber(currentResponse?.temperature_2m),
+    humidityPercent: optionalNumber(currentResponse?.relative_humidity_2m),
+    weatherCode: optionalNumber(currentResponse?.weather_code),
+    windSpeedKmh: optionalNumber(currentResponse?.wind_speed_10m),
     precipitationMm:
-      currentResponse?.precipitation === null
-        ? 0
-        : isFiniteNumber(currentResponse?.precipitation)
-          ? currentResponse.precipitation
-          : undefined,
-    pressureHpa: isFiniteNumber(currentResponse?.surface_pressure)
-      ? currentResponse.surface_pressure
-      : undefined,
+      currentResponse?.precipitation === null ? 0 : optionalNumber(currentResponse?.precipitation),
+    pressureHpa: optionalNumber(currentResponse?.surface_pressure),
   };
 
   const forecast: ForecastDay[] = dates.slice(0, 5).map((date, index) => ({
     date,
-    minimumCelsius: isFiniteNumber(minimums[index]) ? minimums[index] : undefined,
-    maximumCelsius: isFiniteNumber(maximums[index]) ? maximums[index] : undefined,
-    precipitationProbabilityPercent: isFiniteNumber(precipitationProbabilities[index])
-      ? precipitationProbabilities[index]
-      : undefined,
-    weatherCode: isFiniteNumber(weatherCodes[index]) ? weatherCodes[index] : undefined,
+    minimumCelsius: optionalNumber(minimums[index]),
+    maximumCelsius: optionalNumber(maximums[index]),
+    precipitationProbabilityPercent: optionalNumber(precipitationProbabilities[index]),
+    weatherCode: optionalNumber(weatherCodes[index]),
   }));
 
   return { city, current, forecast };

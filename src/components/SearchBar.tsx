@@ -46,7 +46,7 @@ function SearchBar({ onSearch, disabled = false }: SearchBarProps) {
         <input
           aria-describedby={error ? 'city-search-error' : undefined}
           aria-invalid={Boolean(error)}
-          className="min-h-11 w-full rounded-xl border border-white/10 bg-night-800/80 px-4 text-white outline-none transition placeholder:text-white/70 focus:border-accent-400 focus:ring-2 focus:ring-accent-400/40 disabled:cursor-not-allowed disabled:opacity-60"
+          className="min-h-11 w-full rounded-xl border border-white/40 bg-night-800/80 px-4 text-white outline-none transition placeholder:text-white/70 focus:border-accent-400 focus:ring-2 focus:ring-accent-400 disabled:cursor-not-allowed disabled:opacity-60"
           disabled={disabled}
           id="city-search"
           onChange={(event) => handleCityChange(event.target.value)}
@@ -61,7 +61,7 @@ function SearchBar({ onSearch, disabled = false }: SearchBarProps) {
         ) : null}
       </div>
       <button
-        className="min-h-11 rounded-xl bg-accent-500 px-5 font-semibold text-white transition hover:bg-accent-400 focus:outline-none focus:ring-2 focus:ring-accent-400 focus:ring-offset-2 focus:ring-offset-night-900 disabled:cursor-not-allowed disabled:opacity-60"
+        className="min-h-11 rounded-xl bg-accent-500 px-5 font-semibold text-night-900 transition hover:bg-accent-400 focus:outline-none focus:ring-2 focus:ring-accent-400 focus:ring-offset-2 focus:ring-offset-night-900 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-accent-500"
         disabled={disabled}
         type="submit"
       >

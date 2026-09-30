@@ -1,9 +1,14 @@
 interface ErrorStateProps {
   message?: string;
+  retryable: boolean;
   onRetry: () => void;
 }
 
-function ErrorState({ message = 'Não foi possível carregar os dados.', onRetry }: ErrorStateProps) {
+function ErrorState({
+  message = 'Não foi possível carregar os dados.',
+  retryable,
+  onRetry,
+}: ErrorStateProps) {
   return (
     <div
       aria-live="assertive"
@@ -11,13 +16,15 @@ function ErrorState({ message = 'Não foi possível carregar os dados.', onRetry
       role="alert"
     >
       <p className="text-white/85">{message}</p>
-      <button
-        className="min-h-11 rounded-xl bg-accent-500 px-5 font-semibold text-white transition hover:bg-accent-400 focus:outline-none focus:ring-2 focus:ring-accent-400 focus:ring-offset-2 focus:ring-offset-night-900"
-        onClick={onRetry}
-        type="button"
-      >
-        Tentar novamente
-      </button>
+      {retryable ? (
+        <button
+          className="min-h-11 rounded-xl bg-accent-500 px-5 font-semibold text-night-900 transition hover:bg-accent-400 focus:outline-none focus:ring-2 focus:ring-accent-400 focus:ring-offset-2 focus:ring-offset-night-900"
+          onClick={onRetry}
+          type="button"
+        >
+          Tentar novamente
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -19,6 +19,11 @@ function formatMetric(value: number | undefined, suffix: string): string {
 
 function CurrentWeather({ city, current, unit }: CurrentWeatherProps) {
   const condition = getWeatherCondition(current.weatherCode);
+  const hasTemperature =
+    current.temperatureCelsius !== undefined && Number.isFinite(current.temperatureCelsius);
+  const temperature = hasTemperature
+    ? formatTemperature(current.temperatureCelsius, unit)
+    : 'Temperatura indisponível';
   const metrics: Metric[] = [
     { label: 'Umidade', value: formatMetric(current.humidityPercent, '%') },
     { label: 'Vento', value: formatMetric(current.windSpeedKmh, ' km/h') },
@@ -47,8 +52,14 @@ function CurrentWeather({ city, current, unit }: CurrentWeatherProps) {
             {condition.icon}
           </span>
           <div>
-            <p className="text-6xl font-bold tracking-tight sm:text-7xl">
-              {formatTemperature(current.temperatureCelsius, unit)}
+            <p
+              className={
+                hasTemperature
+                  ? 'text-6xl font-bold tracking-tight sm:text-7xl'
+                  : 'text-base font-semibold leading-tight text-white/75'
+              }
+            >
+              {temperature}
             </p>
             <p className="mt-2 text-lg text-white/75">{condition.label}</p>
           </div>

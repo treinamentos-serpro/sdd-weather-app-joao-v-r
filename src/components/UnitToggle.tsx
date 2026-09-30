@@ -53,7 +53,7 @@ function UnitToggle({ unit, onChange }: UnitToggleProps) {
             aria-pressed={isActive}
             className={`min-h-10 min-w-12 rounded-lg px-3 text-sm font-semibold transition focus:outline-none focus:ring-2 focus:ring-accent-400 focus:ring-offset-2 focus:ring-offset-night-900 ${
               isActive
-                ? 'bg-accent-500 text-white'
+                ? 'bg-accent-500 text-night-900 hover:bg-accent-400'
                 : 'text-white/70 hover:bg-white/10 hover:text-white'
             }`}
             key={option}

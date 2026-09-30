@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getWeather, searchCities, WeatherServiceError } from '../services/weatherService';
 import type { City, WeatherData, WeatherError, WeatherStatus } from '../types/weather';
 
@@ -47,12 +47,29 @@ export function useWeather(): UseWeatherResult {
   const [query, setQuery] = useState('');
   const requestId = useRef(0);
   const lastOperation = useRef<LastOperation | undefined>(undefined);
+  const activeController = useRef<AbortController | undefined>(undefined);
 
-  async function loadWeather(city: City, activeRequestId: number): Promise<void> {
+  useEffect(() => () => activeController.current?.abort(), []);
+
+  function startRequest() {
+    const activeRequestId = requestId.current + 1;
+    requestId.current = activeRequestId;
+    activeController.current?.abort();
+    const controller = new AbortController();
+    activeController.current = controller;
+
+    return { activeRequestId, signal: controller.signal };
+  }
+
+  async function loadWeather(
+    city: City,
+    activeRequestId: number,
+    signal: AbortSignal,
+  ): Promise<void> {
     lastOperation.current = { kind: 'weather', city };
 
     try {
-      const weather = await getWeather(city);
+      const weather = await getWeather(city, signal);
 
       if (activeRequestId !== requestId.current) {
         return;
@@ -77,6 +94,8 @@ export function useWeather(): UseWeatherResult {
 
     if (!normalizedName) {
       requestId.current += 1;
+      activeController.current?.abort();
+      activeController.current = undefined;
       lastOperation.current = undefined;
       setQuery('');
       setCities([]);
@@ -90,8 +109,7 @@ export function useWeather(): UseWeatherResult {
       return;
     }
 
-    const activeRequestId = requestId.current + 1;
-    requestId.current = activeRequestId;
+    const { activeRequestId, signal } = startRequest();
     lastOperation.current = { kind: 'search', query: normalizedName };
     setQuery(normalizedName);
     setCities([]);
@@ -100,7 +118,7 @@ export function useWeather(): UseWeatherResult {
     setStatus('loading');
 
     try {
-      const results = await searchCities(normalizedName);
+      const results = await searchCities(normalizedName, signal);
 
       if (activeRequestId !== requestId.current) {
         return;
@@ -113,7 +131,12 @@ export function useWeather(): UseWeatherResult {
         return;
       }
 
-      await loadWeather(results[0], activeRequestId);
+      if (results.length > 1) {
+        setStatus('idle');
+        return;
+      }
+
+      await loadWeather(results[0], activeRequestId, signal);
     } catch (searchError) {
       if (activeRequestId !== requestId.current) {
         return;
@@ -125,12 +148,11 @@ export function useWeather(): UseWeatherResult {
   }
 
   async function selectCity(city: City): Promise<void> {
-    const activeRequestId = requestId.current + 1;
-    requestId.current = activeRequestId;
+    const { activeRequestId, signal } = startRequest();
     setData(undefined);
     setError(undefined);
     setStatus('loading');
-    await loadWeather(city, activeRequestId);
+    await loadWeather(city, activeRequestId, signal);
   }
 
   async function retry(): Promise<void> {

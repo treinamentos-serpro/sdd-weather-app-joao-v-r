@@ -12,9 +12,9 @@ function EmptyState({
       aria-labelledby="empty-state-title"
       className="flex w-full flex-col items-center rounded-2xl border border-white/10 bg-white/5 p-8 text-center text-white shadow-glass backdrop-blur-md"
     >
-      <h2 className="text-2xl font-semibold" id="empty-state-title">
+      <h1 className="text-2xl font-semibold" id="empty-state-title">
         {title}
-      </h2>
+      </h1>
       <p className="mt-2 max-w-md text-white/75">{hint}</p>
     </section>
   );

@@ -1,3 +1,5 @@
+describe('fetchWithTimeout');
+
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   fetchWithTimeout,
@@ -68,6 +70,43 @@ describe('searchCities', () => {
     await expect(searchCities('Lisboa')).resolves.toEqual([]);
   });
 
+  it('retorna vazio quando results é uma lista vazia', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ results: [] }),
+      }),
+    );
+
+    await expect(searchCities('Lisboa')).resolves.toEqual([]);
+  });
+
+  it('rejeita resultados de geocoding com coordenadas não finitas', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          results: [
+            {
+              id: 1,
+              name: 'Lisboa',
+              latitude: Number.POSITIVE_INFINITY,
+              longitude: -9.14,
+              country: 'Portugal',
+            },
+          ],
+        }),
+      }),
+    );
+
+    await expect(searchCities('Lisboa')).rejects.toMatchObject({
+      name: 'WeatherServiceError',
+      kind: 'invalid-response',
+    });
+  });
+
   it('lança WeatherServiceError para resposta não-ok', async () => {
     vi.stubGlobal(
       'fetch',
@@ -94,7 +133,9 @@ describe('getWeather', () => {
     const fetchMock = vi.fn().mockResolvedValue({
       ok: true,
       json: async () => ({
+        timezone: 'Europe/Lisbon',
         current: {
+          daily: {},
           temperature_2m: 20.4,
           relative_humidity_2m: 62,
           weather_code: 0,
@@ -148,12 +189,17 @@ describe('getWeather', () => {
       vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
+          timezone: 'Europe/Lisbon',
+          current: {},
           daily: { time: ['2026-09-30', '2026-10-01'] },
         }),
       }),
     );
 
-    await expect(getWeather(city)).rejects.toBeInstanceOf(WeatherServiceError);
+    await expect(getWeather(city)).rejects.toMatchObject({
+      name: 'WeatherServiceError',
+      kind: 'invalid-response',
+    });
   });
 
   it('converte precipitação nula em zero', async () => {
@@ -162,6 +208,7 @@ describe('getWeather', () => {
       vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
+          timezone: 'Europe/Lisbon',
           current: { precipitation: null },
           daily: {
             time: ['2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04'],
@@ -175,12 +222,65 @@ describe('getWeather', () => {
     });
   });
 
+  it('normaliza campos meteorológicos nulos ou ausentes sem números inválidos', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          timezone: 'Europe/Lisbon',
+          current: {
+            temperature_2m: null,
+            relative_humidity_2m: null,
+            weather_code: null,
+            wind_speed_10m: null,
+            precipitation: null,
+          },
+          daily: {
+            time: ['2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04'],
+            temperature_2m_min: [null],
+            temperature_2m_max: [null, null],
+            weather_code: [null],
+            precipitation_probability_max: [null],
+          },
+        }),
+      }),
+    );
+
+    const weather = await getWeather(city);
+
+    expect(weather.current).toEqual({
+      temperatureCelsius: undefined,
+      humidityPercent: undefined,
+      weatherCode: undefined,
+      windSpeedKmh: undefined,
+      precipitationMm: 0,
+      pressureHpa: undefined,
+    });
+    expect(weather.forecast).toHaveLength(5);
+    expect(weather.forecast[0]).toEqual({
+      date: '2026-09-30',
+      minimumCelsius: undefined,
+      maximumCelsius: undefined,
+      precipitationProbabilityPercent: undefined,
+      weatherCode: undefined,
+    });
+    expect(weather.forecast[1]).toMatchObject({
+      date: '2026-10-01',
+      minimumCelsius: undefined,
+      maximumCelsius: undefined,
+      precipitationProbabilityPercent: undefined,
+      weatherCode: undefined,
+    });
+  });
+
   it('lança WeatherServiceError quando current está ausente', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn().mockResolvedValue({
         ok: true,
         json: async () => ({
+          timezone: 'Europe/Lisbon',
           daily: {
             time: ['2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04'],
           },
@@ -196,19 +296,72 @@ describe('getWeather', () => {
       'fetch',
       vi.fn().mockResolvedValue({
         ok: true,
-        json: async () => ({ current: {} }),
+        json: async () => ({ timezone: 'Europe/Lisbon', current: {} }),
       }),
     );
 
     await expect(getWeather(city)).rejects.toBeInstanceOf(WeatherServiceError);
   });
+
+  it('rejeita forecast sem timezone', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          current: {},
+          daily: {
+            time: ['2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04'],
+          },
+        }),
+      }),
+    );
+
+    await expect(getWeather(city)).rejects.toMatchObject({
+      name: 'WeatherServiceError',
+      kind: 'invalid-response',
+    });
+  });
 });
 
 describe('fetchWithTimeout', () => {
   it('converte falhas de rede em WeatherServiceError', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('offline')));
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
 
     await expect(fetchWithTimeout('/weather')).rejects.toThrow('Falha de rede.');
+  });
+
+  it('classifica uma busca offline como falha de rede amigável', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')));
+
+    await expect(searchCities('Lisboa')).rejects.toMatchObject({
+      name: 'WeatherServiceError',
+      kind: 'network',
+      message: 'Falha de rede.',
+    });
+  });
+
+  it('propaga cancelamento externo ao fetch sem classificar como timeout', async () => {
+    const externalController = new AbortController();
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((_input: RequestInfo | URL, init?: RequestInit) => {
+        return new Promise<Response>((_resolve, reject) => {
+          init?.signal?.addEventListener(
+            'abort',
+            () => reject(new DOMException('Aborted', 'AbortError')),
+            { once: true },
+          );
+        });
+      }),
+    );
+
+    const request = expect(
+      fetchWithTimeout('/weather', { signal: externalController.signal }),
+    ).rejects.toMatchObject({ kind: 'network' });
+    externalController.abort();
+
+    await request;
   });
 
   it('converte AbortError em timeout após 10 segundos', async () => {

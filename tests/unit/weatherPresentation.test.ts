@@ -13,6 +13,18 @@ describe('weather code presentation', () => {
       icon: '？',
     });
   });
+
+  it.each([
+    { code: 56, label: 'Garoa congelante fraca' },
+    { code: 57, label: 'Garoa congelante intensa' },
+    { code: 66, label: 'Chuva congelante fraca' },
+    { code: 67, label: 'Chuva congelante intensa' },
+    { code: 77, label: 'Grãos de neve' },
+    { code: 85, label: 'Pancadas de neve fracas' },
+    { code: 86, label: 'Pancadas de neve intensas' },
+  ])('mapeia o código WMO $code', ({ code, label }) => {
+    expect(getWeatherCondition(code).label).toBe(label);
+  });
 });
 
 describe('date presentation', () => {
