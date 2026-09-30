@@ -28,7 +28,7 @@ jobs:
       - name: Validar seções obrigatórias
         run: |
           SPEC="specs/weather-app-spec.md"
-          REQUIRED=("Overview" "Functional Requirements" "User Stories" "Acceptance Criteria" "Non-Functional Requirements" "Edge Cases" "Assumptions" "Risks")
+          REQUIRED=("Overview" "Functional Requirements" "User Stories" "Acceptance Criteria" "Non-Functional Requirements" "Edge Cases" "Assumptions" "Risks" "Out of Scope")
           MISSING=0
           for section in "${REQUIRED[@]}"; do
             if ! grep -qi "$section" "$SPEC"; then
@@ -40,3 +40,17 @@ jobs:
             exit 1
           fi
           echo "Todas as seções obrigatórias estão presentes."
+
+      - name: Verificar artefatos do fluxo SDD
+        run: |
+          MISSING=0
+          for artifact in "plans/weather-app-plan.md" "tasks/weather-app-tasks.md"; do
+            if [ ! -f "$artifact" ]; then
+              echo "::error::Artefato SDD ausente: $artifact"
+              MISSING=1
+            fi
+          done
+          if [ "$MISSING" -eq 1 ]; then
+            exit 1
+          fi
+          echo "Plano e tarefas encontrados."

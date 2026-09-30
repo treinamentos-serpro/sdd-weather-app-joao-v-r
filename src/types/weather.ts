@@ -1,47 +1,99 @@
-/**
- * Contratos de domínio compartilhados do Weather App.
- *
- * Decisão de arquitetura: as temperaturas são sempre armazenadas em Celsius
- * internamente e convertidas apenas na camada de apresentação. Assim, a troca
- * de unidade (C/F) nunca dispara um novo request.
- */
-
-export type Unit = 'celsius' | 'fahrenheit';
-
-/** Resultado da API de geocoding (uma cidade). */
 export interface City {
   id: number;
   name: string;
-  country: string;
-  /** Estado/região, quando disponível (ajuda a desambiguar homônimos). */
-  admin1?: string;
   latitude: number;
   longitude: number;
+  country: string;
+  admin1?: string;
 }
 
-/** Condições atuais. Temperatura sempre em °C. */
 export interface CurrentWeather {
-  temperature: number;
-  weatherCode: number;
-  humidity: number;
-  windSpeed: number;
-  pressure: number;
-  precipitation: number;
-  time: string;
+  temperatureCelsius?: number;
+  weatherCode?: number;
+  humidityPercent?: number;
+  windSpeedKmh?: number;
+  precipitationMm?: number;
+  pressureHpa?: number;
 }
 
-/** Um dia da previsão. Temperaturas sempre em °C. */
 export interface ForecastDay {
   date: string;
-  min: number;
-  max: number;
-  weatherCode: number;
-  precipitationProbability: number;
+  minimumCelsius?: number;
+  maximumCelsius?: number;
+  weatherCode?: number;
+  precipitationProbabilityPercent?: number;
 }
 
-/** Agregado entregue à UI: cidade + clima atual + 5 dias de previsão. */
 export interface WeatherData {
   city: City;
   current: CurrentWeather;
   forecast: ForecastDay[];
 }
+
+export type Unit = 'celsius' | 'fahrenheit';
+
+export type WeatherStatus = 'idle' | 'loading' | 'success' | 'error' | 'empty';
+
+export type WeatherErrorKind = 'validation' | 'network' | 'api' | 'timeout' | 'invalid-response';
+
+export interface WeatherError {
+  kind: WeatherErrorKind;
+  message: string;
+  retryable: boolean;
+}
+
+export const mockWeatherData: WeatherData = {
+  city: {
+    id: 3448439,
+    name: 'Sao Paulo',
+    latitude: -23.5505,
+    longitude: -46.6333,
+    country: 'Brazil',
+    admin1: 'Sao Paulo',
+  },
+  current: {
+    temperatureCelsius: 22,
+    weatherCode: 1,
+    humidityPercent: 68,
+    windSpeedKmh: 14,
+    precipitationMm: 0,
+    pressureHpa: 1015,
+  },
+  forecast: [
+    {
+      date: '2026-09-30',
+      minimumCelsius: 17,
+      maximumCelsius: 25,
+      weatherCode: 1,
+      precipitationProbabilityPercent: 10,
+    },
+    {
+      date: '2026-10-01',
+      minimumCelsius: 18,
+      maximumCelsius: 26,
+      weatherCode: 2,
+      precipitationProbabilityPercent: 20,
+    },
+    {
+      date: '2026-10-02',
+      minimumCelsius: 19,
+      maximumCelsius: 27,
+      weatherCode: 3,
+      precipitationProbabilityPercent: 35,
+    },
+    {
+      date: '2026-10-03',
+      minimumCelsius: 18,
+      maximumCelsius: 24,
+      weatherCode: 61,
+      precipitationProbabilityPercent: 65,
+    },
+    {
+      date: '2026-10-04',
+      minimumCelsius: 17,
+      maximumCelsius: 23,
+      weatherCode: 80,
+      precipitationProbabilityPercent: 55,
+    },
+  ],
+};
